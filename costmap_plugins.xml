@@ -1,0 +1,7 @@
+<class_libraries>
+  <library path="lib/libblind_spot_obstacle_layer">
+    <class base_class_type="costmap_2d::Layer" type="blind_spot_obstacle_layer::BlindSpotObstacleLayer">
+      <description>Obstacle Layer that handles obstacle clearing based on sensor limitations and robot blind spots</description>
+    </class>
+  </library>
+</class_libraries>
