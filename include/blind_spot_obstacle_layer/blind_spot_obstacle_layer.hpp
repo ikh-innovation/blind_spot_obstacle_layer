@@ -20,6 +20,7 @@
 
 #include <XmlRpc.h>
 #include <blind_spot_obstacle_layer/BlindSpotObstacleLayerConfig.h>
+#include <std_srvs/Trigger.h>
 
 namespace blind_spot_obstacle_layer
 {
@@ -133,17 +134,19 @@ protected:
   // Used only for testing purposes
   std::vector<costmap_2d::Observation> static_clearing_observations_, static_marking_observations_;
 
-  bool rolling_window_, publish_blind_spot_marker_;
+  bool rolling_window_, publish_blind_spot_marker_, skip_next_blind_spot_, blind_spot_enabled_;
   dynamic_reconfigure::Server<blind_spot_obstacle_layer::BlindSpotObstacleLayerConfig>* dsrv_;
 
   int combination_method_, blind_spot_combination_method_;
 
 private:
   ros::Publisher blind_spot_marker_pub_;
+  ros::ServiceServer clear_blind_spot_srv_;
   visualization_msgs::Marker blind_spot_polygon_marker_;
   void reconfigureCB(blind_spot_obstacle_layer::BlindSpotObstacleLayerConfig& config, uint32_t level);
   bool saveOldCostmap(std::vector<std::pair<unsigned int, uint8_t>>&, double, double, double);
   bool restoreBasedOnOldCostmap(std::vector<std::pair<unsigned int, uint8_t>>&);
+  bool clearBlindSpotCallback(std_srvs::Trigger::Request&, std_srvs::Trigger::Response&);
 };
 
 }  // namespace blind_spot_obstacle_layer

@@ -26,6 +26,8 @@ void BlindSpotObstacleLayer::onInitialize()
 
   bool track_unknown_space;
   nh.param("track_unknown_space", track_unknown_space, layered_costmap_->isTrackingUnknown());
+  clear_blind_spot_srv_ =
+      nh.advertiseService("clear_blind_spot", &BlindSpotObstacleLayer::clearBlindSpotCallback, this);
   if (track_unknown_space)
     default_value_ = NO_INFORMATION;
   else
@@ -186,7 +188,7 @@ void BlindSpotObstacleLayer::onInitialize()
   // TODO: Enhancement1: add a combo enum on dynamic reconfigure for some predefined shapes along with their values
   // (as an array of doubles)
 
-  // TODO: Enhancement1: add a polygon per observation source instead of the general one below
+  // TODO: Enhancement2: add a polygon per observation source instead of the general one below
   blind_spot_polygon_marker_.header.frame_id = blind_spot_frame;
   blind_spot_polygon_marker_.header.stamp = ros::Time::now();
   blind_spot_polygon_marker_.ns = "blind_spot_obstacle_layer_polygon_" + blind_spot_frame;
@@ -294,6 +296,7 @@ void BlindSpotObstacleLayer::reconfigureCB(blind_spot_obstacle_layer::BlindSpotO
   combination_method_ = config.combination_method;
   blind_spot_combination_method_ = config.blind_spot_combination_method;
   publish_blind_spot_marker_ = config.publish_blind_spot_marker;
+  blind_spot_enabled_ = config.blind_spot_enabled;
 }
 
 void BlindSpotObstacleLayer::laserScanCallback(const sensor_msgs::LaserScanConstPtr& message,
@@ -452,7 +455,10 @@ void BlindSpotObstacleLayer::updateBounds(double robot_x, double robot_y, double
     return;
   useExtraBounds(min_x, min_y, max_x, max_y);
   std::vector<std::pair<unsigned int, uint8_t>> old_costmap;
-  saveOldCostmap(old_costmap, robot_x, robot_y, robot_yaw);
+  if (blind_spot_enabled_)
+  {
+    saveOldCostmap(old_costmap, robot_x, robot_y, robot_yaw);
+  }
 
   bool current = true;
   std::vector<Observation> observations, clearing_observations;
@@ -525,7 +531,15 @@ void BlindSpotObstacleLayer::updateBounds(double robot_x, double robot_y, double
       touch(px, py, min_x, min_y, max_x, max_y);
     }
   }
-  restoreBasedOnOldCostmap(old_costmap);
+  if (skip_next_blind_spot_)
+  {
+    old_costmap.clear();
+    skip_next_blind_spot_ = false;
+  }
+  if (blind_spot_enabled_)
+  {
+    restoreBasedOnOldCostmap(old_costmap);
+  }
 
   if (publish_blind_spot_marker_)
   {
@@ -747,6 +761,11 @@ void BlindSpotObstacleLayer::reset()
   resetMaps();
   current_ = true;
   activate();
+}
+
+bool BlindSpotObstacleLayer::clearBlindSpotCallback(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res)
+{
+  skip_next_blind_spot_ = true;
 }
 
 }  // namespace blind_spot_obstacle_layer
