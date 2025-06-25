@@ -37,7 +37,7 @@ In a launch file:
 
 ```
 
-In the move_base configuration file for local costmap:
+In the move_base configuration file for local/global costmap:
 
 ```yaml
 blind_spot_obstacle_layer:
@@ -62,4 +62,5 @@ blind_spot_obstacle_layer:
     observation_range: 26.0
     obstacle_range: 25.0
     raytrace_range: 30.0
+    footprint_clearing: true
 ```
