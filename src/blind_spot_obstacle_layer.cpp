@@ -772,11 +772,15 @@ void BlindSpotObstacleLayer::reset()
 bool BlindSpotObstacleLayer::clearBlindSpotCallback(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res)
 {
   skip_next_blind_spot_ = true;
+  res.success = skip_next_blind_spot_;
+  return true;
 }
 
 bool BlindSpotObstacleLayer::clearCostmapCallback(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res)
 {
   clear_next_costmap_ = true;
+  res.success = clear_next_costmap_;
+  return true;
 }
 
 }  // namespace blind_spot_obstacle_layer
