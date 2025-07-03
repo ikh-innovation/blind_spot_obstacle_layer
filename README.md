@@ -49,7 +49,7 @@ blind_spot_obstacle_layer:
   blind_spot_polygon_marker_topic: "blind_spot_polygon_marker"
 
   observation_sources: laserscan_from_pointcloud2
-  laserscanfrom__pointcloud2:
+  laserscan_from_pointcloud2:
     data_type: LaserScan
     topic: /aristos/livox/lidar/scan
     marking: true

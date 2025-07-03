@@ -450,22 +450,16 @@ bool BlindSpotObstacleLayer::restoreBasedOnOldCostmap(std::vector<std::pair<unsi
 void BlindSpotObstacleLayer::updateBounds(double robot_x, double robot_y, double robot_yaw, double* min_x,
                                           double* min_y, double* max_x, double* max_y)
 {
-  if (clear_next_costmap_)
-  {
-    for (auto x = 0; x < getSizeInCellsX(); x++)
-    {
-      for (auto y = 0; y < getSizeInCellsY(); y++)
-      {
-        setCost(x, y, costmap_2d::FREE_SPACE);
-      }
-    }
-    clear_next_costmap_ = false;
-  }
-  if (rolling_window_)
-    updateOrigin(robot_x - getSizeInMetersX() / 2, robot_y - getSizeInMetersY() / 2);
   if (!enabled_)
     return;
+  if (rolling_window_)
+    updateOrigin(robot_x - getSizeInMetersX() / 2, robot_y - getSizeInMetersY() / 2);
   useExtraBounds(min_x, min_y, max_x, max_y);
+  if (clear_next_costmap_)
+  {
+    resetMaps();
+    clear_next_costmap_ = false;
+  }
   std::vector<std::pair<unsigned int, uint8_t>> old_costmap;
   if (blind_spot_enabled_)
   {
