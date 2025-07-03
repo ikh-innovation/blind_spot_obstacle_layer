@@ -26,6 +26,7 @@ void BlindSpotObstacleLayer::onInitialize()
 
   bool track_unknown_space;
   nh.param("track_unknown_space", track_unknown_space, layered_costmap_->isTrackingUnknown());
+  clear_costmap_srv_ = nh.advertiseService("clear_costmap", &BlindSpotObstacleLayer::clearCostmapCallback, this);
   clear_blind_spot_srv_ =
       nh.advertiseService("clear_blind_spot", &BlindSpotObstacleLayer::clearBlindSpotCallback, this);
   if (track_unknown_space)
@@ -449,6 +450,17 @@ bool BlindSpotObstacleLayer::restoreBasedOnOldCostmap(std::vector<std::pair<unsi
 void BlindSpotObstacleLayer::updateBounds(double robot_x, double robot_y, double robot_yaw, double* min_x,
                                           double* min_y, double* max_x, double* max_y)
 {
+  if (clear_next_costmap_)
+  {
+    for (auto x = 0; x < getSizeInCellsX(); x++)
+    {
+      for (auto y = 0; y < getSizeInCellsY(); y++)
+      {
+        setCost(x, y, costmap_2d::FREE_SPACE);
+      }
+    }
+    clear_next_costmap_ = false;
+  }
   if (rolling_window_)
     updateOrigin(robot_x - getSizeInMetersX() / 2, robot_y - getSizeInMetersY() / 2);
   if (!enabled_)
@@ -766,6 +778,11 @@ void BlindSpotObstacleLayer::reset()
 bool BlindSpotObstacleLayer::clearBlindSpotCallback(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res)
 {
   skip_next_blind_spot_ = true;
+}
+
+bool BlindSpotObstacleLayer::clearCostmapCallback(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res)
+{
+  clear_next_costmap_ = true;
 }
 
 }  // namespace blind_spot_obstacle_layer
