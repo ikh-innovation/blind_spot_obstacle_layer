@@ -13,6 +13,7 @@
   <depend>sensor_msgs</depend>
   <depend>costmap_2d</depend>
   <depend>pluginlib</depend>
+  <depend>std_srvs</depend>
   <depend>tf2_ros</depend>
   <depend>roscpp</depend>
   <export>

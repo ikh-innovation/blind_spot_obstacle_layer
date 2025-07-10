@@ -110,7 +110,8 @@ protected:
   void updateRaytraceBounds(double ox, double oy, double wx, double wy, double range, double* min_x, double* min_y,
                             double* max_x, double* max_y);
 
-  std::vector<geometry_msgs::Point> transformed_footprint_;
+  std::vector<geometry_msgs::Point> transformed_footprint_, transformed_blind_spot_polygon_;
+  std::vector<std::vector<geometry_msgs::Point>> transformed_recovery_clearance_polygons_;
   bool footprint_clearing_enabled_;
   void updateFootprint(double robot_x, double robot_y, double robot_yaw, double* min_x, double* min_y, double* max_x,
                        double* max_y);
@@ -134,20 +135,29 @@ protected:
   // Used only for testing purposes
   std::vector<costmap_2d::Observation> static_clearing_observations_, static_marking_observations_;
 
-  bool rolling_window_, publish_blind_spot_marker_, skip_next_blind_spot_, blind_spot_enabled_, clear_next_costmap_;
+  bool rolling_window_, publish_blind_spot_marker_, skip_next_blind_spot_, blind_spot_enabled_, clear_next_costmap_,
+      publish_recovery_clearance_polygons_, clear_next_recovery_polygon_;
   dynamic_reconfigure::Server<blind_spot_obstacle_layer::BlindSpotObstacleLayerConfig>* dsrv_;
 
-  int combination_method_, blind_spot_combination_method_;
+  int combination_method_, blind_spot_combination_method_, clear_next_recovery_polygon_index_;
 
 private:
   ros::Publisher blind_spot_marker_pub_;
-  ros::ServiceServer clear_blind_spot_srv_, clear_costmap_srv_;
   visualization_msgs::Marker blind_spot_polygon_marker_;
+  ros::ServiceServer clear_blind_spot_srv_, clear_costmap_srv_;
+  std::vector<ros::Publisher> recovery_clearance_polygons_pubs_;
+  std::vector<ros::ServiceServer> clear_next_recovery_polygon_srvs_;
+  std::vector<visualization_msgs::Marker> recovery_clearance_polygons_;
+
   void reconfigureCB(blind_spot_obstacle_layer::BlindSpotObstacleLayerConfig& config, uint32_t level);
   bool saveOldCostmap(std::vector<std::pair<unsigned int, uint8_t>>&, double, double, double);
   bool restoreBasedOnOldCostmap(std::vector<std::pair<unsigned int, uint8_t>>&);
   bool clearBlindSpotCallback(std_srvs::Trigger::Request&, std_srvs::Trigger::Response&);
   bool clearCostmapCallback(std_srvs::Trigger::Request&, std_srvs::Trigger::Response&);
+  bool clearRecoveryPolygonCallback(const int, std_srvs::Trigger::Request&, std_srvs::Trigger::Response&);
+  bool getPolygonFromYaml(const XmlRpc::XmlRpcValue&, visualization_msgs::Marker&);
+  bool getArrayOfPolygonsFromYaml(const XmlRpc::XmlRpcValue&, const std::string&,
+                                  std::vector<visualization_msgs::Marker>&);
 };
 
 }  // namespace blind_spot_obstacle_layer

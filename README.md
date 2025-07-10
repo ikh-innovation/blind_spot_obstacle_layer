@@ -47,6 +47,14 @@ blind_spot_obstacle_layer:
   blind_spot_frame: "aristos_base_link"
   blind_spot_combination_method: 1
   blind_spot_polygon_marker_topic: "blind_spot_polygon_marker"
+  recovery_clearance_polygons_frame: "aristos_base_link"
+  recovery_clearance_polygons_topic: "recovery_clearance_polygons"
+  recovery_clearance_polygons:
+    - [[0, -2], [2, 0], [0, 2], [-2, 0]]
+    - [[4, -3], [4, 3], [0, 1], [0, -1]]
+    - [[-4, -3], [-4, 3], [0, 1], [0, -1]]
+    - [[-6, -2], [6, -2], [6, 2], [-6, 2]]
+    - [[-2, -6], [2, -6], [2, 6], [-2, 6]]
 
   observation_sources: laserscan_from_pointcloud2
   laserscan_from_pointcloud2:

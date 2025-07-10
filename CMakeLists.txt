@@ -12,6 +12,7 @@ find_package(
              sensor_msgs
              costmap_2d
              pluginlib
+             std_srvs
              tf2_ros
              roscpp)
 
@@ -34,6 +35,7 @@ catkin_package(
   sensor_msgs
   costmap_2d
   pluginlib
+  std_srvs
   tf2_ros
   roscpp
   DEPENDS

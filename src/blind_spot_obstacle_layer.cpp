@@ -181,9 +181,15 @@ void BlindSpotObstacleLayer::onInitialize()
     }
   }
 
-  std::string blind_spot_obstacle_layer_topic, blind_spot_frame;
+  clear_next_recovery_polygon_ = false;
+  clear_next_recovery_polygon_index_ = -1;
+  std::string blind_spot_obstacle_layer_topic, blind_spot_frame, recovery_clearance_polygons_frame,
+      recovery_clearance_polygons_topic;
   nh.param("blind_spot_polygon_marker_topic", blind_spot_obstacle_layer_topic, std::string("blind_spot_polygon"));
+  nh.param("recovery_clearance_polygons_topic", recovery_clearance_polygons_topic,
+           std::string("recovery_clearance_polygons"));
   nh.param("blind_spot_frame", blind_spot_frame, std::string("base_link"));
+  nh.param("recovery_clearance_polygons_frame", recovery_clearance_polygons_frame, std::string("base_link"));
   blind_spot_marker_pub_ = nh.advertise<visualization_msgs::Marker>(blind_spot_obstacle_layer_topic, 10);
 
   // TODO: Enhancement1: add a combo enum on dynamic reconfigure for some predefined shapes along with their values
@@ -203,61 +209,13 @@ void BlindSpotObstacleLayer::onInitialize()
   blind_spot_polygon_marker_.color.b = 0.0f;
   blind_spot_polygon_marker_.color.a = 1.0;
 
-  XmlRpc::XmlRpcValue bspolygon_xml;
+  XmlRpc::XmlRpcValue polygon_xml;
+  if (nh.hasParam("blind_spot_polygon"))
+  {
+    nh.getParam("blind_spot_polygon", polygon_xml);
+    getPolygonFromYaml(polygon_xml, blind_spot_polygon_marker_);
+  }
 
-  try
-  {
-    if (nh.getParam("blind_spot_polygon", bspolygon_xml) and bspolygon_xml.getType() == XmlRpc::XmlRpcValue::TypeArray)
-    {
-      for (int i = 0; i < bspolygon_xml.size(); ++i)
-      {
-        // NOTE: The blind spot polygon is a 2d array of doubles (or ints)
-        // I am using invalid_type to first check if the next element in
-        // the xml value is an array and then I re-use it to check the
-        // types of the elements of that array
-        bool invalid_type = true;
-        std::vector<double> point;
-        if (bspolygon_xml[i].getType() == XmlRpc::XmlRpcValue::TypeArray)
-        {
-          invalid_type = false;
-          for (int j = 0; j < bspolygon_xml[i].size(); ++j)
-          {
-            if (bspolygon_xml[i][j].getType() == XmlRpc::XmlRpcValue::TypeDouble)
-            {
-              point.push_back(static_cast<double>(bspolygon_xml[i][j]));
-            }
-            else if (bspolygon_xml[i][j].getType() == XmlRpc::XmlRpcValue::TypeInt)
-            {
-              point.push_back(static_cast<int>(bspolygon_xml[i][j]));
-            }
-            else
-            {
-              ROS_WARN("Unexpected value while reading the blind_spot_polygon parameter. Supported values: 2d array "
-                       "of doubles or integers.");
-              invalid_type = true;
-              break;
-            }
-          }
-          if (point.size() == 2)
-          {
-            geometry_msgs::Point p;
-            p.x = point[0];
-            p.y = point[1];
-            blind_spot_polygon_marker_.points.push_back(p);
-          }
-        }
-        if (invalid_type)
-        {
-          blind_spot_polygon_marker_.points.clear();
-          break;
-        }
-      }
-    }
-  }
-  catch (XmlRpc::XmlRpcException e)
-  {
-    ROS_WARN("Error while trying to read the blind spot polygon:: %s", e.getMessage().c_str());
-  }
   if (blind_spot_polygon_marker_.points.empty())
   {
     ROS_WARN("No blind_spot_polygon was set. Falling back to default...");
@@ -269,9 +227,170 @@ void BlindSpotObstacleLayer::onInitialize()
       blind_spot_polygon_marker_.points.push_back(point);
     }
   }
+  if (blind_spot_polygon_marker_.points.front().x != blind_spot_polygon_marker_.points.back().x or
+      blind_spot_polygon_marker_.points.front().y != blind_spot_polygon_marker_.points.back().y)
+  {
+    blind_spot_polygon_marker_.points.push_back(blind_spot_polygon_marker_.points.front());
+  }
+  for (auto p : blind_spot_polygon_marker_.points)
+  {
+    transformed_blind_spot_polygon_.push_back(p);
+  }
+
+  if (nh.hasParam("recovery_clearance_polygons"))
+  {
+    nh.getParam("recovery_clearance_polygons", polygon_xml);
+    getArrayOfPolygonsFromYaml(polygon_xml, recovery_clearance_polygons_frame, recovery_clearance_polygons_);
+
+    for (auto polygon : recovery_clearance_polygons_)
+    {
+      std::vector<geometry_msgs::Point> v;
+      for (auto p : polygon.points)
+      {
+        v.push_back(p);
+      }
+      transformed_recovery_clearance_polygons_.push_back(v);
+    }
+
+    for (int i = 0; i < recovery_clearance_polygons_.size(); i++)
+    {
+      ros::Publisher p =
+          nh.advertise<visualization_msgs::Marker>(recovery_clearance_polygons_topic + std::to_string(i), 10);
+      recovery_clearance_polygons_pubs_.push_back(p);
+      auto clear_recovery_polygon_lambda = [this, i](std_srvs::Trigger::Request& req,
+                                                     std_srvs::Trigger::Response& res) -> bool {
+        return this->clearRecoveryPolygonCallback(i, req, res);
+      };
+      boost::function<bool(std_srvs::Trigger::Request&, std_srvs::Trigger::Response&)> crpl =
+          clear_recovery_polygon_lambda;
+      ros::ServiceServer s = nh.advertiseService<std_srvs::Trigger::Request, std_srvs::Trigger::Response>(
+          "clear_revovery_polygon" + std::to_string(i), crpl);
+      clear_next_recovery_polygon_srvs_.push_back(s);
+    }
+  }
 
   dsrv_ = NULL;
   setupDynamicReconfigure(nh);
+}
+
+bool BlindSpotObstacleLayer::getArrayOfPolygonsFromYaml(const XmlRpc::XmlRpcValue& polygons_xml,
+                                                        const std::string& markers_frame,
+                                                        std::vector<visualization_msgs::Marker>& polygons)
+{
+  if (polygons_xml.getType() == XmlRpc::XmlRpcValue::TypeArray)
+  {
+    for (int i = 0; i < polygons_xml.size(); ++i)
+    {
+      if (polygons_xml[i].getType() == XmlRpc::XmlRpcValue::TypeArray)
+      {
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = markers_frame;
+        marker.header.stamp = ros::Time::now();
+        marker.ns = "recovery_clearance_polygons_" + std::to_string(i);
+        marker.id = i;
+        marker.type = visualization_msgs::Marker::LINE_STRIP;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 0.1;
+        marker.color.r = 0.0;
+        marker.color.g = 0.0;
+        marker.color.b = 0.0;
+        marker.color.a = 1.0;
+        auto c = i % 6;
+        if (c == 0)
+        {
+          marker.color.r = 1.0;
+          marker.color.g = 1.0;
+        }
+        else if (c == 1)
+        {
+          marker.color.r = 1.0;
+          marker.color.b = 1.0;
+        }
+        else if (c == 2)
+        {
+          marker.color.g = 1.0;
+          marker.color.b = 1.0;
+        }
+        else if (c == 3)
+        {
+          marker.color.b = 1.0;
+        }
+        else if (c == 4)
+        {
+          marker.color.g = 1.0;
+        }
+        else if (c == 5)
+        {
+          marker.color.r = 1.0;
+        }
+        else
+        {
+          marker.color.r = 1.0;
+          marker.color.g = 1.0;
+          marker.color.b = 1.0;
+        }
+        getPolygonFromYaml(polygons_xml[i], marker);
+        polygons.push_back(marker);
+      }
+    }
+  }
+}
+
+bool BlindSpotObstacleLayer::getPolygonFromYaml(const XmlRpc::XmlRpcValue& polygon_xml,
+                                                visualization_msgs::Marker& vis_marker)
+{
+  try
+  {
+    if (polygon_xml.getType() == XmlRpc::XmlRpcValue::TypeArray)
+    {
+      for (int i = 0; i < polygon_xml.size(); ++i)
+      {
+        // NOTE: The blind spot polygon is a 2d array of doubles (or ints)
+        // I am using invalid_type to first check if the next element in
+        // the xml value is an array and then I re-use it to check the
+        // types of the elements of that array
+        std::vector<double> point;
+        if (polygon_xml[i].getType() == XmlRpc::XmlRpcValue::TypeArray)
+        {
+          for (int j = 0; j < polygon_xml[i].size(); ++j)
+          {
+            if (polygon_xml[i][j].getType() == XmlRpc::XmlRpcValue::TypeDouble)
+            {
+              point.push_back(static_cast<double>(polygon_xml[i][j]));
+            }
+            else if (polygon_xml[i][j].getType() == XmlRpc::XmlRpcValue::TypeInt)
+            {
+              point.push_back(static_cast<int>(polygon_xml[i][j]));
+            }
+            else
+            {
+              ROS_WARN("Unexpected value while reading the blind_spot_polygon parameter. Supported values: 2d array "
+                       "of doubles or integers.");
+              vis_marker.points.clear();
+              return false;
+            }
+          }
+          if (point.size() == 2)
+          {
+            geometry_msgs::Point p;
+            p.x = point[0];
+            p.y = point[1];
+            vis_marker.points.push_back(p);
+          }
+        }
+      }
+      if (not vis_marker.points.empty() and (vis_marker.points.front().x != vis_marker.points.back().x or
+                                             vis_marker.points.front().y != vis_marker.points.back().y))
+      {
+        vis_marker.points.push_back(vis_marker.points.front());
+      }
+    }
+  }
+  catch (XmlRpc::XmlRpcException e)
+  {
+    ROS_WARN("Error while trying to read the polygon:: %s", e.getMessage().c_str());
+  }
 }
 
 void BlindSpotObstacleLayer::setupDynamicReconfigure(ros::NodeHandle& nh)
@@ -297,6 +416,7 @@ void BlindSpotObstacleLayer::reconfigureCB(blind_spot_obstacle_layer::BlindSpotO
   combination_method_ = config.combination_method;
   blind_spot_combination_method_ = config.blind_spot_combination_method;
   publish_blind_spot_marker_ = config.publish_blind_spot_marker;
+  publish_recovery_clearance_polygons_ = config.publish_recovery_clearance_polygons;
   blind_spot_enabled_ = config.blind_spot_enabled;
 }
 
@@ -392,12 +512,10 @@ bool BlindSpotObstacleLayer::saveOldCostmap(std::vector<std::pair<unsigned int, 
                                             double robot_y, double robot_yaw)
 {
   std::vector<costmap_2d::MapLocation> map_polygon;
-  std::vector<geometry_msgs::Point> polygon;
-  costmap_2d::transformFootprint(robot_x, robot_y, robot_yaw, blind_spot_polygon_marker_.points, polygon);
-  for (unsigned int i = 0; i < polygon.size(); i++)
+  for (unsigned int i = 0; i < transformed_blind_spot_polygon_.size(); i++)
   {
     costmap_2d::MapLocation loc;
-    if (!worldToMap(polygon[i].x, polygon[i].y, loc.x, loc.y))
+    if (!worldToMap(transformed_blind_spot_polygon_[i].x, transformed_blind_spot_polygon_[i].y, loc.x, loc.y))
     {
       return false;
     }
@@ -455,14 +573,11 @@ void BlindSpotObstacleLayer::updateBounds(double robot_x, double robot_y, double
   if (rolling_window_)
     updateOrigin(robot_x - getSizeInMetersX() / 2, robot_y - getSizeInMetersY() / 2);
   useExtraBounds(min_x, min_y, max_x, max_y);
-  if (clear_next_costmap_)
-  {
-    resetMaps();
-    clear_next_costmap_ = false;
-  }
   std::vector<std::pair<unsigned int, uint8_t>> old_costmap;
   if (blind_spot_enabled_)
   {
+    costmap_2d::transformFootprint(robot_x, robot_y, robot_yaw, blind_spot_polygon_marker_.points,
+                                   transformed_blind_spot_polygon_);
     saveOldCostmap(old_costmap, robot_x, robot_y, robot_yaw);
   }
 
@@ -547,10 +662,29 @@ void BlindSpotObstacleLayer::updateBounds(double robot_x, double robot_y, double
     restoreBasedOnOldCostmap(old_costmap);
   }
 
+  for (int i = 0; i < recovery_clearance_polygons_.size(); i++)
+  {
+    transformed_recovery_clearance_polygons_[i].clear();
+    std::vector<geometry_msgs::Point> v;
+    costmap_2d::transformFootprint(robot_x, robot_y, robot_yaw, recovery_clearance_polygons_[i].points, v);
+    for (auto p : v)
+    {
+      transformed_recovery_clearance_polygons_[i].push_back(p);
+    }
+  }
+
   if (publish_blind_spot_marker_)
   {
     blind_spot_polygon_marker_.header.stamp = ros::Time::now();
     blind_spot_marker_pub_.publish(blind_spot_polygon_marker_);
+  }
+  if (publish_recovery_clearance_polygons_)
+  {
+    for (int i = 0; i < recovery_clearance_polygons_.size(); i++)
+    {
+      recovery_clearance_polygons_[i].header.stamp = ros::Time::now();
+      recovery_clearance_polygons_pubs_[i].publish(recovery_clearance_polygons_[i]);
+    }
   }
   updateFootprint(robot_x, robot_y, robot_yaw, min_x, min_y, max_x, max_y);
 }
@@ -561,12 +695,6 @@ void BlindSpotObstacleLayer::updateFootprint(double robot_x, double robot_y, dou
   if (!footprint_clearing_enabled_)
     return;
   costmap_2d::transformFootprint(robot_x, robot_y, robot_yaw, costmap_2d::Layer::getFootprint(), transformed_footprint_);
-  if (not blind_spot_polygon_marker_.points.empty() and
-          blind_spot_polygon_marker_.points.front().x != blind_spot_polygon_marker_.points.back().x or
-      blind_spot_polygon_marker_.points.front().y != blind_spot_polygon_marker_.points.back().y)
-  {
-    blind_spot_polygon_marker_.points.push_back(blind_spot_polygon_marker_.points.front());
-  }
 
   for (unsigned int i = 0; i < transformed_footprint_.size(); i++)
   {
@@ -579,11 +707,23 @@ void BlindSpotObstacleLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int
   if (!enabled_)
     return;
 
+  if (clear_next_costmap_)
+  {
+    resetMaps();
+    clear_next_costmap_ = false;
+  }
   if (footprint_clearing_enabled_)
   {
     setConvexPolygonCost(transformed_footprint_, costmap_2d::FREE_SPACE);
   }
+  if (clear_next_recovery_polygon_ and clear_next_recovery_polygon_index_ >= 0)
+  {
+    setConvexPolygonCost(transformed_recovery_clearance_polygons_[clear_next_recovery_polygon_index_],
+                         costmap_2d::FREE_SPACE);
 
+    clear_next_recovery_polygon_ = false;
+    clear_next_recovery_polygon_index_ = -1;
+  }
   switch (combination_method_)
   {
     case 0:  // Overwrite
@@ -780,6 +920,15 @@ bool BlindSpotObstacleLayer::clearCostmapCallback(std_srvs::Trigger::Request& re
 {
   clear_next_costmap_ = true;
   res.success = clear_next_costmap_;
+  return true;
+}
+
+bool BlindSpotObstacleLayer::clearRecoveryPolygonCallback(const int polygon_index, std_srvs::Trigger::Request& req,
+                                                          std_srvs::Trigger::Response& res)
+{
+  clear_next_recovery_polygon_ = true;
+  clear_next_recovery_polygon_index_ = polygon_index;
+  res.success = clear_next_recovery_polygon_index_ != -1;
   return true;
 }
 
