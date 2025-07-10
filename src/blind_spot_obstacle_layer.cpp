@@ -264,7 +264,7 @@ void BlindSpotObstacleLayer::onInitialize()
       boost::function<bool(std_srvs::Trigger::Request&, std_srvs::Trigger::Response&)> crpl =
           clear_recovery_polygon_lambda;
       ros::ServiceServer s = nh.advertiseService<std_srvs::Trigger::Request, std_srvs::Trigger::Response>(
-          "clear_revovery_polygon" + std::to_string(i), crpl);
+          "clear_recovery_polygon" + std::to_string(i), crpl);
       clear_next_recovery_polygon_srvs_.push_back(s);
     }
   }
