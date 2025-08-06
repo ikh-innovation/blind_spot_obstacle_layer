@@ -273,7 +273,7 @@ void BlindSpotObstacleLayer::onInitialize()
   setupDynamicReconfigure(nh);
 }
 
-bool BlindSpotObstacleLayer::getArrayOfPolygonsFromYaml(const XmlRpc::XmlRpcValue& polygons_xml,
+void BlindSpotObstacleLayer::getArrayOfPolygonsFromYaml(const XmlRpc::XmlRpcValue& polygons_xml,
                                                         const std::string& markers_frame,
                                                         std::vector<visualization_msgs::Marker>& polygons)
 {

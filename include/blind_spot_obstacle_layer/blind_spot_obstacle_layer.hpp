@@ -156,7 +156,7 @@ private:
   bool clearCostmapCallback(std_srvs::Trigger::Request&, std_srvs::Trigger::Response&);
   bool clearRecoveryPolygonCallback(const int, std_srvs::Trigger::Request&, std_srvs::Trigger::Response&);
   bool getPolygonFromYaml(const XmlRpc::XmlRpcValue&, visualization_msgs::Marker&);
-  bool getArrayOfPolygonsFromYaml(const XmlRpc::XmlRpcValue&, const std::string&,
+  void getArrayOfPolygonsFromYaml(const XmlRpc::XmlRpcValue&, const std::string&,
                                   std::vector<visualization_msgs::Marker>&);
 };
 
