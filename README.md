@@ -37,13 +37,24 @@ In a launch file:
 
 ```
 
-In the move_base configuration file for local/global costmap:
+In the move_base costmap common configuration file:
 
 ```yaml
+plugins:
+  - name: static_layer
+    type: costmap_2d::StaticLayer
+  - name: inflation_layer
+    type: costmap_2d::InflationLayer
+  - name: blind_spot_obstacle_layer
+    type: blind_spot_obstacle_layer::BlindSpotObstacleLayer
+  - name: mini_inflation_layer
+    type: costmap_2d::InflationLayer
+
 blind_spot_obstacle_layer:
   inf_is_valid: false
   enabled: true
-  blind_spot_polygon: [[0, -3], [3, 0], [0, 3], [-3, 0]]
+  blind_spot_enabled: false
+  blind_spot_polygon: [[0, -1], [1, 0], [0, 1], [-1, 0]]
   blind_spot_frame: "aristos_base_link"
   blind_spot_combination_method: 1
   blind_spot_polygon_marker_topic: "blind_spot_polygon_marker"
@@ -51,10 +62,10 @@ blind_spot_obstacle_layer:
   recovery_clearance_polygons_topic: "recovery_clearance_polygons"
   recovery_clearance_polygons:
     - [[0, -2], [2, 0], [0, 2], [-2, 0]]
-    - [[4, -3], [4, 3], [0, 1], [0, -1]]
-    - [[-4, -3], [-4, 3], [0, 1], [0, -1]]
     - [[-6, -2], [6, -2], [6, 2], [-6, 2]]
     - [[-2, -6], [2, -6], [2, 6], [-2, 6]]
+    - [[4, -3], [4, 3], [0, 1], [0, -1]]
+    - [[-4, -3], [-4, 3], [0, 1], [0, -1]]
 
   observation_sources: laserscan_from_pointcloud2
   laserscan_from_pointcloud2:
@@ -63,12 +74,27 @@ blind_spot_obstacle_layer:
     marking: true
     clearing: true
     track_unknown_space: true
-    frame: aristos_mid360_link
-    min_obstacle_height: 0.4
+    # frame: aristos_mid360_link
+    frame: aristos_base_link
+    min_obstacle_height: -0.1
     max_obstacle_height: 2.0
     update_frequency: 5.0
     observation_range: 26.0
     obstacle_range: 25.0
     raytrace_range: 30.0
     footprint_clearing: true
+
+static_layer:
+  map_topic: /map
+  subscribe_to_updates: true
+
+# common inflation layer
+inflation_layer:
+  inflation_radius: 2.0
+  cost_scaling_factor: 3.5
+
+# common mini inflation layer
+mini_inflation_layer:
+  inflation_radius: 0.3
+  cost_scaling_factor: 1.0
 ```
