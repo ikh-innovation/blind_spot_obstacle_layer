@@ -391,6 +391,7 @@ bool BlindSpotObstacleLayer::getPolygonFromYaml(const XmlRpc::XmlRpcValue& polyg
   {
     ROS_WARN("Error while trying to read the polygon:: %s", e.getMessage().c_str());
   }
+  return true;
 }
 
 void BlindSpotObstacleLayer::setupDynamicReconfigure(ros::NodeHandle& nh)
