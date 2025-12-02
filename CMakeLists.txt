@@ -45,3 +45,6 @@ catkin_package(
 add_library(blind_spot_obstacle_layer src/blind_spot_obstacle_layer.cpp)
 add_dependencies(blind_spot_obstacle_layer ${${PROJECT_NAME}_EXPORTED_TARGETS}
                  ${catkin_EXPORTED_TARGETS})
+target_link_libraries(blind_spot_obstacle_layer
+  ${catkin_LIBRARIES}
+)
